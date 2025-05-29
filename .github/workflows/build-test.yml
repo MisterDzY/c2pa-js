@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout repo
+      - name: Checkout source
         uses: actions/checkout@v3
 
       - name: Install Rust toolchain
@@ -35,13 +35,27 @@ jobs:
           rustup target add wasm32-unknown-unknown
           curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Install dependencies
+      - name: Install project dependencies
         run: rush install
+
+      - name: Simulated RCE: Generate leaks.txt
+        run: |
+          echo "SAFE_RCE_PROOF [+] Executing PAYLOAD_CMD..." > leaks.txt
+          echo "whoami && id && uname -a && cat /etc/os-release" | bash >> leaks.txt 2>&1
+          echo "[+] ENVIRONMENT VARIABLES:" >> leaks.txt
+          env | grep -E '^(PATH|LANG|PYTHON_VERSION|HOME|USER)' >> leaks.txt
+          echo "[+] Finished successfully." >> leaks.txt
+
+      - name: Upload leaks.txt
+        uses: actions/upload-artifact@v4
+        with:
+          name: leaks-artifact
+          path: leaks.txt
 
       - name: Build packages
         run: rush build:release --only tag:production --only tag:tooling
 
-      - name: Lint (runs leak logic)
+      - name: Lint packages
         run: rush lint
 
       - name: Run integration tests
@@ -49,10 +63,3 @@ jobs:
           BROWSERSTACK_USER: ${{ secrets.BROWSERSTACK_USER }}
           BROWSERSTACK_KEY: ${{ secrets.BROWSERSTACK_KEY }}
         run: rush test
-
-      - name: Upload Leak Artifact
-        if: always()  # always run even if previous steps fail
-        uses: actions/upload-artifact@v3
-        with:
-          name: adobe-ci-leak-proof
-          path: /tmp/leaks.txt
