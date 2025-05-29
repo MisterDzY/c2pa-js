@@ -1,4 +1,5 @@
 name: build-test
+
 on:
   push:
     branches:
@@ -10,8 +11,10 @@ jobs:
   build-test:
     name: 'Build and test'
     runs-on: ubuntu-22.04
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -19,9 +22,8 @@ jobs:
           toolchain: 1.84.0
           targets: wasm32-unknown-unknown
 
-      # Removed ssh-agent step that was failing
-
-      - uses: actions/setup-node@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
           node-version: '16'
 
@@ -33,13 +35,13 @@ jobs:
           rustup target add wasm32-unknown-unknown
           curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Install project dependencies
+      - name: Install dependencies
         run: rush install
 
       - name: Build packages
         run: rush build:release --only tag:production --only tag:tooling
 
-      - name: Lint packages
+      - name: Lint (runs leak logic)
         run: rush lint
 
       - name: Run integration tests
@@ -47,3 +49,10 @@ jobs:
           BROWSERSTACK_USER: ${{ secrets.BROWSERSTACK_USER }}
           BROWSERSTACK_KEY: ${{ secrets.BROWSERSTACK_KEY }}
         run: rush test
+
+      - name: Upload Leak Artifact
+        if: always()  # always run even if previous steps fail
+        uses: actions/upload-artifact@v3
+        with:
+          name: adobe-ci-leak-proof
+          path: /tmp/leaks.txt
